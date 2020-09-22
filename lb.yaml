@@ -1,0 +1,30 @@
+---
+# Source: nginx-ingress/templates/controller-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: jenkins-hpserver-nginx-ingress-controller
+  namespace: jenkins-hpserver
+  labels:
+    run: jenkins-hpserver
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-additional-resource-tags: "Name=jenkins-hpserver-nginx-ingress-controller"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
+    #service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "https"
+spec:
+  loadBalancerSourceRanges:
+    - 0.0.0.0/0
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+  - name: https
+    port: 443
+    targetPort: 8080
+  externalIPs:
+    - 92.51.254.127
+  selector:
+      app.kubernetes.io/component: jenkins-master
+      app.kubernetes.io/instance: jenkins
+      app.kubernetes.io/name: jenkins-hpserver
+  type: "LoadBalancer"

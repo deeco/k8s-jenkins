@@ -1,0 +1,338 @@
+clusterZone: "cluster.local"
+nameOverride: "jenkins-hpserver"
+fullnameOverride: "jenkins-hpserver"
+namespaceOverride: jenkins-hpserver
+master:
+  componentName: "jenkins-master"
+  image: "jenkins/jenkins"
+  tag: "lts"
+  imagePullPolicy: "Always"
+  imagePullSecretName:
+  lifecycle:
+    postStart:
+      exec:
+        command: ["/bin/sh", "-c", "echo Script from the postStart handler to install jq and aws > /usr/share/message && apt-get upgrade -y && apt-get update -y && apt-get install vim -y && apt-get install jq -y && apt-get install awscli -y && apt-get install -y -qq groff && apt-get install -y -qq less"]
+  numExecutors: 10
+  customJenkinsLabels: []
+  useSecurity: true
+  enableXmlConfig: true
+  securityRealm: |-
+    <securityRealm class="hudson.security.LegacySecurityRealm"/>
+  authorizationStrategy: |-
+     <authorizationStrategy class="hudson.security.FullControlOnceLoggedInAuthorizationStrategy">
+       <denyAnonymousReadAccess>true</denyAnonymousReadAccess>
+     </authorizationStrategy>
+  hostNetworking: false
+  # login user for Jenkins
+  adminUser: "ctjenkinsadmin"
+  rollingUpdate: {}
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "512Mi"
+    limits:
+      cpu: "2000m"
+      memory: "4096Mi"
+  usePodSecurityContext: true
+  servicePort: 8080
+  targetPort: 8080
+  # Type NodePort for minikube
+  serviceAnnotations: {}
+  deploymentLabels: {}
+  serviceLabels: {}
+  podLabels: {}
+  # NodePort for Jenkins Service
+  healthProbes: true
+  healthProbesLivenessTimeout: 5
+  healthProbesReadinessTimeout: 5
+  healthProbeLivenessPeriodSeconds: 10
+  healthProbeReadinessPeriodSeconds: 10
+  healthProbeLivenessFailureThreshold: 5
+  healthProbeReadinessFailureThreshold: 3
+  healthProbeLivenessInitialDelay: 90
+  healthProbeReadinessInitialDelay: 60
+  slaveListenerPort: 50000
+  slaveHostPort:
+  disabledAgentProtocols:
+    - JNLP-connect
+    - JNLP2-connect
+  csrf:
+    defaultCrumbIssuer:
+      enabled: true
+      proxyCompatability: true
+  cli: false
+  slaveListenerServiceType: "ClusterIP"
+  slaveListenerServiceAnnotations: {}
+  slaveKubernetesNamespace:
+  loadBalancerSourceRanges:
+  - 0.0.0.0/0
+  extraPorts: []
+  installPlugins:
+    - configuration-as-code:latest
+    - kubernetes:latest
+    - workflow-aggregator:latest
+    - workflow-job:latest
+    - credentials-binding:latest
+    - git:latest
+    - git-client:latest
+    - git-server:latest
+    - greenballs:latest
+    - blueocean:latest
+    - strict-crumb-issuer:latest
+    - http_request:latest
+    - matrix-project:latest
+    - jquery:latest
+    - artifactory:latest
+    - jdk-tool:latest
+    - matrix-auth:latest
+  enableRawHtmlMarkupFormatter: false
+  scriptApproval: []
+  initScripts:
+    - |
+      #!groovy
+      
+      import hudson.model.*;
+      import jenkins.model.*;
+      import jenkins.security.*;
+      import jenkins.security.apitoken.*;
+      
+      // script parameters
+      def userName = 'cloudopsuser'
+      def tokenName = 'spintoken'
+      def uploadscript =['/bin/sh', '/var/lib/jenkins/update_token.sh']
+
+      def user = User.get(userName, false)
+      def apiTokenProperty = user.getProperty(ApiTokenProperty.class)
+      def result = apiTokenProperty.tokenStore.generateNewToken(tokenName)
+      def file = new File("/tmp/token.txt")
+      file.delete()
+      file.write result.plainValue
+      uploadscript.execute()
+      uploadscript.waitForOrKill(100)
+      user.save()
+
+      return result.plainValue
+      value = result.plainValue
+  jobs:
+    Test-Job: |-
+      <?xml version='1.0' encoding='UTF-8'?>
+      <project>
+        <keepDependencies>false</keepDependencies>
+        <properties/>
+        <scm class="hudson.scm.NullSCM"/>
+        <canRoam>false</canRoam>
+        <disabled>false</disabled>
+        <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+        <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+        <triggers/>
+        <concurrentBuild>false</concurrentBuild>
+        <builders/>
+        <publishers/>
+        <buildWrappers/>
+      </project>
+    Test-Job-Spinnaker-Pipeline: |-
+      <?xml version='1.1' encoding='UTF-8'?>
+      <flow-definition plugin="workflow-job@2.36">
+        <description>Test Pipeline</description>
+        <keepDependencies>false</keepDependencies>
+        <properties>
+          <hudson.plugins.jira.JiraProjectProperty plugin="jira@3.0.13"/>
+          <jenkins.model.BuildDiscarderProperty>
+            <strategy class="hudson.tasks.LogRotator">
+              <daysToKeep>5</daysToKeep>
+              <numToKeep>5</numToKeep>
+              <artifactDaysToKeep>-1</artifactDaysToKeep>
+              <artifactNumToKeep>-1</artifactNumToKeep>
+            </strategy>
+          </jenkins.model.BuildDiscarderProperty>
+        </properties>
+        <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@2.80">
+          <script>podTemplate(label: &apos;mypod&apos;, containers: [
+          containerTemplate(name: &apos;git&apos;, image: &apos;alpine/git&apos;, ttyEnabled: true, command: &apos;cat&apos;),
+          containerTemplate(name: &apos;maven&apos;, image: &apos;maven:3.3.9-jdk-8-alpine&apos;, command: &apos;cat&apos;, ttyEnabled: true),
+          containerTemplate(name: &apos;docker&apos;, image: &apos;docker&apos;, command: &apos;cat&apos;, ttyEnabled: true)
+        ],
+        volumes: [
+        hostPathVolume(mountPath: &apos;/var/run/docker.sock&apos;, hostPath: &apos;/var/run/docker.sock&apos;),
+        ]
+        ) {
+          node(&apos;mypod&apos;) {
+              stage(&apos;Check running containers&apos;) {
+                  container(&apos;docker&apos;) {
+                      // example to show you can run docker commands when you mount the socket
+                      sh &apos;hostname&apos;
+                      sh &apos;hostname -i&apos;
+                      sh &apos;docker ps&apos;
+                  }
+              }
+
+              stage(&apos;Clone repository&apos;) {
+                  container(&apos;git&apos;) {
+                      sh &apos;whoami&apos;
+                      sh &apos;hostname -i&apos;
+                      sh &apos;git clone -b master https://github.com/deeco/hello-world-war.git&apos;
+                  }
+              }
+
+              stage(&apos;Maven Build&apos;) {
+                  container(&apos;maven&apos;) {
+                      dir(&apos;hello-world-war/&apos;) {
+                          sh &apos;hostname&apos;
+                          sh &apos;hostname -i&apos;
+                          sh &apos;mvn clean install&apos;
+                      }
+                  }
+              }
+          }
+      }</script>
+          <sandbox>true</sandbox>
+        </definition>
+        <triggers/>
+        <disabled>false</disabled>
+  JCasC:
+    enabled: true
+    defaultConfig: true
+    configScripts:
+      welcome-message: |
+        jenkins:
+          systemMessage: Welcome to our CI\CD server.  This Jenkins is configured and managed 'as code'.
+  customInitContainers: []
+  sidecars:
+    configAutoReload:
+      enabled: false
+      image: kiwigrid/k8s-sidecar:0.1.20
+      imagePullPolicy: IfNotPresent
+      resources: {}
+      sshTcpPort: 1044
+      folder: "/var/jenkins_home/casc_configs"
+    other: []
+  nodeSelector: {}
+  tolerations: []
+    #- key: "node.kubernetes.io/disk-pressure"
+    #  operator: "Equal"
+    #  effect: "NoSchedule"
+    #- key: "node.kubernetes.io/memory-pressure"
+    #  operator: "Equal"
+    #  effect: "NoSchedule"
+    #- key: "node.kubernetes.io/pid-pressure"
+    #  operator: "Equal"
+    #  effect: "NoSchedule"
+    #- key: "node.kubernetes.io/not-ready"
+    #  operator: "Equal"
+    #  effect: "NoSchedule"
+    #- key: "node.kubernetes.io/unreachable"
+    #  operator: "Equal"
+    #  effect: "NoSchedule"
+    #- key: "node.kubernetes.io/unschedulable"
+    #  operator: "Equal"
+    #  effect: "NoSchedule"
+  podAnnotations: {}
+  customConfigMap: false
+  overwriteConfig: false
+  overwriteJobs: false
+
+  jenkinsUrlProtocol: "https"
+  # If you set this prefix and use ingress controller then you might want to set the ingress path below
+  #jenkinsUriPrefix: "/jenkins"
+
+  ingress:
+    enabled: true
+    apiVersion: "extensions/v1beta1"
+    labels: {}
+    annotations: {}
+    kubernetes.io/secure-backends: "true"
+    kubernetes.io/ingress.class: nginx
+    name: ""
+    #service.beta.kubernetes.io/aws-load-balancer-ssl-cert: arn:aws:acm:us-west-2:454211873573:certificate/a3146344-5888-48d5-900c-80a9d1532781 #replace this value
+    #service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+    #kubernetes.io/ingress.class: nginx
+    #kubernetes.io/tls-acme: "true"
+    #path: "/jenkins"
+    kubernetes.io/ssl-redirect: "true"
+    #nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    hostName: ""
+    tls:
+     #- secretName: jenkins.cluster.local
+      # hosts:
+      #   - jenkins.cluster.local
+
+  backendconfig:
+    enabled: false
+    apiVersion: "extensions/v1beta1"
+    name:
+    labels: {}
+    annotations: {}
+    spec: {}
+
+  route:
+    enabled: false
+    labels: {}
+    annotations: {}
+
+  additionalConfig: {}
+  hostAliases: []
+
+  prometheus:
+    enabled: false
+    serviceMonitorAdditionalLabels: {}
+    scrapeInterval: 60s
+    scrapeEndpoint: /prometheus
+    alertingRulesAdditionalLabels: {}
+    alertingrules: []
+
+  testEnabled: true
+
+agent:
+  enabled: true
+  image: "jenkins/jnlp-slave"
+  tag: "latest"
+  customJenkinsLabels: []
+  imagePullSecretName:
+  componentName: "jenkins-slave"
+  privileged: false
+  resources:
+    requests:
+      cpu: "1"
+      memory: "1Gi"
+    limits:
+      cpu: "1"
+      memory: "4Gi"
+  alwaysPullImage: false
+  podRetention: "Never"
+  envVars: []
+  # mount docker in agent pod
+  volumes:
+    - type: HostPath
+      hostPath: /var/run/docker.sock
+      mountPath: /var/run/docker.sock
+  nodeSelector: {}
+  command:
+  args:
+    - echo installing jq;
+      apt-get update;
+      apt-get install jq -y; 
+      apt-get install -y git; 
+      apt-get install -y java-1.8.0-openjdk;
+      apt-get install awscli;
+  sideContainerName: "jnlp"
+  TTYEnabled: true
+  containerCap: 10
+  podName: "default"
+  idleMinutes: 0
+  yamlTemplate: ""
+
+persistence:
+  enabled: true
+  existingClaim: jenkins-hpserver-pvc
+  storageClass: jenkins-hpserver-pv
+  annotations: {}
+  accessMode: "ReadWriteOnce"
+  size: "20Gi"
+  volumes:
+  mounts:
+ 
+networkPolicy:
+  enabled: false
+  apiVersion: networking.k8s.io/v1
+
+checkDeprecation: true
