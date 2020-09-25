@@ -87,7 +87,7 @@ master:
   useSecurity: true
 
   # enables configuration done directly via XML files
-  enableXmlConfig: false
+  enableXmlConfig: true
   # Allows to configure different SecurityRealm using Jenkins XML
   securityRealm: |-
     <securityRealm class="hudson.security.LegacySecurityRealm"/>
@@ -100,12 +100,8 @@ master:
   # When enabling LDAP or another non-Jenkins identity source, the built-in admin account will no longer exist.
   # If you disable the non-Jenkins identity store and instead use the Jenkins internal one,
   # you should revert master.adminUser to your preferred admin user:
-  adminUser: "admin"
+  adminUser: "jenkinsadmin"
   # adminPassword: <defaults to random>
-  admin:
-    existingSecret: ""
-    userKey: jenkins-admin-user
-    passwordKey: jenkins-admin-password
   # This values should not be changed unless you use your custom image of jenkins or any devired from. If you want to use
   # Cloudbees Jenkins Distribution docker, you should set jenkinsHome: "/var/cloudbees-jenkins-distribution"
   jenkinsHome: "/var/jenkins_home"
@@ -146,7 +142,8 @@ master:
   targetPort: 8080
   # For minikube, set this to NodePort, elsewhere use LoadBalancer
   # Use ClusterIP if your setup includes ingress controller
-  serviceType: ClusterIP
+  serviceType: NodePort
+  nodePort: 30920
   # Jenkins master service annotations
   serviceAnnotations: {}
   # Jenkins master custom labels
@@ -304,7 +301,7 @@ master:
       # jcasc changes will cause a reboot and will only be applied at the subsequent start-up.  Auto-reload uses the
       # http://<jenkins_url>/reload-configuration-as-code endpoint to reapply config when changes to the configScripts are detected.
       enabled: true
-      image: kiwigrid/k8s-sidecar:0.1.193
+      image: kiwigrid/k8s-sidecar:0.1.209
       imagePullPolicy: IfNotPresent
       resources: {}
         #   limits:

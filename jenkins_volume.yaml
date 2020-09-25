@@ -11,5 +11,5 @@ spec:
     storage: 20Gi
   persistentVolumeReclaimPolicy: Delete
   hostPath:
-    path: /
+    path: /data
 

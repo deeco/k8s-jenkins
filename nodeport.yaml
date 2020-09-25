@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jenkins-hpserver
+  namespace: jenkins-hpserver
+  labels:
+    app: jenkins-hpserver
+spec:
+  type: NodePort
+  ports:
+    - port: 8080
+      nodePort: 30920
+      name: jenkins
+    - port: 443
+      nodePort: 30930
+      name: https
+  selector:
+      app.kubernetes.io/component: jenkins-master
+      app.kubernetes.io/instance: jenkins-hpserver
+      app.kubernetes.io/name: jenkins-hpserver
